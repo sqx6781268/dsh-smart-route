@@ -10,6 +10,7 @@ const artifact=process.argv[2]
 if(!artifact)throw new Error('用法：node scripts/install-smoke.mjs <tarball完整路径>，由 npm run release:prepare 自动传入 npm CLI')
 const npmCLI=process.env.npm_execpath
 if(!npmCLI)throw new Error('需要 npm_execpath 指向当前 npm CLI')
+const expectedVersion=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version
 const dir=mkdtempSync(join(tmpdir(),'multi-chain-install-'))
 try {
  writeFileSync(join(dir,'package.json'),JSON.stringify({name:'isolated-plugin-install',version:'1.0.0',private:true}))
@@ -17,7 +18,7 @@ try {
  assert.equal(install.status,0,install.stderr||install.stdout)
  const require=createRequire(join(dir,'package.json'))
  const pkg=require('dsh-multi-chain/package.json')
- assert.equal(pkg.name,'dsh-multi-chain');assert.equal(pkg.version,'0.1.0')
+ assert.equal(pkg.name,'dsh-multi-chain');assert.equal(pkg.version,expectedVersion)
  assert.equal(require('dsh-multi-chain/locale/zh.json').meta.title,'多链路由')
  assert.ok(require.resolve('dsh-multi-chain/client'))
  const entry=await import(pathToFileURL(require.resolve('dsh-multi-chain')).href)
