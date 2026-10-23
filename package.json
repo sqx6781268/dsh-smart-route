@@ -1,0 +1,53 @@
+{
+  "name": "dsh-multi-chain",
+  "version": "0.1.0",
+  "private": true,
+  "repository": { "type": "git", "url": "git+https://github.com/sqx6781268/dsh-smart-route.git" },
+  "homepage": "https://github.com/sqx6781268/dsh-smart-route#readme",
+  "bugs": { "url": "https://github.com/sqx6781268/dsh-smart-route/issues" },
+  "type": "module",
+  "description": "多链路由：把多条独立的模型降级链注册成一个虚拟 provider，在模型选择器里手动选链，链内失败自动降级（commit 前切换对你不可见）",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "locale",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "examples",
+    "docs/配置说明.md",
+    "docs/发布验收说明.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "immediately": true
+    }
+  },
+  "license": "MIT",
+  "engines": { "node": ">=24", "dsh": "0.2.1-rc.2" },
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "check": "node scripts/check.mjs",
+    "test:browser": "node scripts/browser-test.mjs",
+    "release:prepare": "node scripts/release.mjs",
+    "prepack": "npm run check"
+  }
+}

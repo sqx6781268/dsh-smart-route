@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "policy": {
+    "mode": "all",
+    "neverCodes": ["ABORTED", "CONTEXT_WINDOW_EXCEEDED"],
+    "codes": [],
+    "cooldown": { "enabled": true, "ms": 300000, "codes": ["AUTH", "INVALID_CREDENTIAL", "QUOTA", "QUOTA_EXCEEDED", "ACCOUNT_QUOTA"], "match": "exact" }
+  },
+  "chains": [
+    { "id": "quality", "name": "质量优先", "strategy": "fallback", "models": ["your-primary-provider/your-model", "your-backup-provider/your-model"] },
+    { "id": "fast", "name": "快速响应", "strategy": "fallback", "models": ["your-fast-provider/your-fast-model", "your-backup-provider/your-fast-model"] }
+  ]
+}

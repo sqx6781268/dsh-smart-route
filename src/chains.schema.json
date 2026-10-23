@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "多链路由配置",
+  "description": "省略 version 的旧配置按版本 1 读取；读取时忽略未知字段，网页保存仅写出已知字段，运行时以归一化规则为准。",
+  "type": "object",
+  "required": ["chains"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1, "default": 1 },
+    "chains": { "type": "array", "items": { "$ref": "#/$defs/chain" } },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["all", "only", "all-except"], "default": "all" },
+        "neverCodes": { "$ref": "#/$defs/codes" },
+        "codes": { "$ref": "#/$defs/codes" },
+        "cooldown": { "oneOf": [{ "const": false }, { "type": "object", "properties": {
+          "enabled": { "type": "boolean" }, "ms": { "type": "integer", "minimum": 1 },
+          "codes": { "$ref": "#/$defs/codes" }, "match": { "enum": ["exact", "contains"] }
+        }}] }
+      }
+    }
+  },
+  "$defs": {
+    "codes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "member": { "oneOf": [
+      { "type": "string", "pattern": "^[^/]+/.+$" },
+      { "type": "object", "required": ["provider", "model"], "properties": {
+        "provider": { "type": "string", "minLength": 1 }, "model": { "type": "string", "minLength": 1 }
+      }}
+    ]},
+    "chain": { "type": "object", "required": ["models"], "properties": {
+      "id": { "type": "string", "description": "省略或空白时按位置生成 chain-N" },
+      "name": { "type": "string" },
+      "enabled": { "type": "boolean", "default": true },
+      "strategy": { "enum": ["fallback", "round-robin"], "default": "fallback" },
+      "stickyLimit": { "type": "integer", "minimum": 1, "default": 1 },
+      "models": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/member" } }
+    }}
+  }
+}

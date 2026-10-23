@@ -1,0 +1,8 @@
+# dsh-multi-chain bundle patch。
+#
+# 一行 insert 即挂载 Host 半身。config 是链的「内置默认值」——
+# 真正的链清单放在 ~/.dsh/multi-chain/chains.json，改完热生效、不用重启。
+- insert:
+    - id: multi-chain
+      name: 'dsh-multi-chain'
+      config: {}

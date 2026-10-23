@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Multi-chain Routing",
+    "description": "Select a model chain with automatic fallback, hot-reloaded configuration, runtime status and session badges."
+  }
+}

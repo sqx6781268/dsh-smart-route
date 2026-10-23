@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base href="/multi-chain/">
+<title>多链路由 · 链编辑器</title>
+<style>
+:root { color-scheme: light dark; --bg:#f5f5f7; --surface:#fff; --field:#f0f0f2; --text:#202124; --muted:#61636a; --border:#d5d7dc; --accent:#175dcc; --error:#a02222; }
+@media(prefers-color-scheme:dark) { :root { --bg:#202124; --surface:#292a2e; --field:#33353a; --text:#eeeff2; --muted:#b6b8c1; --border:#50525a; --accent:#9abaff; --error:#ffb5b5; } }
+* { box-sizing:border-box; }
+body { margin:0; padding:20px; background:var(--bg); color:var(--text); font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif; }
+main { max-width:1100px; margin:auto; }
+h1 { font-size:22px; margin:0; } h2 { font-size:16px; margin:0 0 8px; }
+p { margin:4px 0 12px; } .hint { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+.toolbar,.chain-head,.member,.coolrow { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.toolbar { margin:16px 0; } .spacer { flex:1; } .chain { background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:14px; margin-bottom:12px; }
+.chain-head { margin-bottom:12px; } .member { margin:8px 0; padding:8px; background:var(--field); border-radius:6px; }
+input,select,button { font:inherit; border:1px solid var(--border); border-radius:5px; padding:6px 9px; color:var(--text); background:var(--surface); min-width:0; }
+button { cursor:pointer; } button:hover { border-color:var(--accent); } button:disabled { cursor:default; opacity:.5; }
+button.primary { color:var(--surface); background:var(--accent); border-color:var(--accent); font-weight:600; }
+input[type=text],select { max-width:100%; } .member select { flex:1 1 240px; width:240px; } .member .free { flex:2 1 240px; width:240px; }
+label { display:inline-flex; align-items:center; gap:6px; } .id { width:120px; } .small-number { width:80px; } .idx { color:var(--muted); min-width:18px; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#error { color:var(--error); white-space:pre-wrap; } #message { min-height:24px; }
+#status-list { overflow-x:auto; } table { border-collapse:collapse; width:100%; text-align:left; } th,td { border-bottom:1px solid var(--border); vertical-align:top; padding:8px; overflow-wrap:anywhere; } th { color:var(--muted); font-weight:500; } td { min-width:100px; }
+#status-list time { white-space:nowrap; } details { margin-bottom:16px; } summary { cursor:pointer; font-weight:600; } .status-toolbar { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:10px 0; }
+@media(max-width:600px) { body { padding:12px; } .member select,.member .free { flex-basis:100%; width:100%; } .chain-head>input:first-of-type { flex:1 1 100%; width:100%; } .chain { padding:10px; } }
+</style>
+</head>
+<body><main>
+<h1>多链路由 · 链编辑器</h1>
+<p class="hint">选择一条链，按顺序尝试成员；保存后供下一次请求使用。</p>
+<p id="meta" class="hint">加载中…</p>
+<details id="runtime"><summary>运行状态 · 本次启动</summary>
+<div class="status-toolbar"><span id="status-hint" class="hint">最近路由记录保存在内存中，重启清空。</span><button id="refresh-status" type="button">刷新状态</button></div>
+<div id="status-list">展开后加载。</div>
+</details>
+<div class="toolbar">
+<button id="addChain" disabled>＋ 新增链</button><span class="spacer"></span>
+<button id="reload">重新加载</button><button class="primary" id="save" disabled>保存配置</button>
+</div>
+<p id="error" role="alert"></p><p id="message" role="status" aria-live="polite"></p>
+<div id="chains"></div><div id="policy"></div>
+</main><script>
+'use strict'
+let STATE = null
+let DIRTY = false
+let BUSY = false
+let EDIT_REVISION = 0
+const $ = (selector) => document.querySelector(selector)
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag)
+  for (const [key,value] of Object.entries(attrs)) {
+    if (key === 'text') node.textContent = value
+    else if (key.startsWith('on') && typeof value === 'function') node.addEventListener(key.slice(2), value)
+    else node.setAttribute(key, value)
+  }
+  for (const child of children) node.appendChild(child)
+  return node
+}
+function dirty() { DIRTY = true; EDIT_REVISION++; $('#save').textContent = '保存配置（有改动）'; $('#message').textContent = '' }
+function controls() { $('#save').disabled = !STATE || BUSY; $('#addChain').disabled = !STATE || BUSY; $('#reload').disabled = BUSY }
+async function request(path, options = {}) {
+  const response = await fetch(path, { ...options, cache:'no-store', signal:AbortSignal.timeout(10000) })
+  const data = await response.json()
+  if (!response.ok || data.ok === false) throw new Error(data.error || 'HTTP ' + response.status)
+  return data
+}
+async function load() {
+  BUSY = true; controls(); $('#error').textContent = ''
+  try {
+    const data = await request('api/state')
+    if (!Array.isArray(data.chains) || !Array.isArray(data.capabilities?.providers)) throw new Error('配置接口返回格式不正确')
+    if (data.version !== 1 || (data.errors?.length ?? 0) > 0) throw new Error('配置需要先修复文件或恢复备份：' + (data.errors || ['不支持此配置版本']).join('；'))
+    if (typeof data.revision !== 'string') throw new Error('宿主尚未提供配置修订号，请确认已加载新版插件')
+    STATE = data
+    STATE.policy ||= {}
+    STATE.policy.cooldown = STATE.policy.cooldown === false ? {enabled:false,ms:300000} : (STATE.policy.cooldown || {enabled:true,ms:300000})
+    $('#meta').textContent = '配置文件：' + STATE.chainsFile + ' · 版本 ' + (STATE.version || 1) + (STATE.capabilities.truncated ? ' · 模型目录已截断，未列出的渠道不代表没有模型' : '')
+    $('#error').textContent = (STATE.errors || []).join('\n')
+    DIRTY = false; EDIT_REVISION++; $('#save').textContent = '保存配置'; render()
+  } catch(error) { $('#error').textContent = '加载失败：' + error.message }
+  finally { BUSY = false; controls() }
+}
+function options(selected) {
+  const fragment = document.createDocumentFragment()
+  fragment.append(el('option', {value:'',text:'— 手动输入 —'}))
+  for (const provider of STATE.capabilities.providers) {
+    if (!provider.models?.length || provider.id === 'MultiChain') continue
+    const group = el('optgroup',{label:provider.name || provider.id})
+    for (const model of provider.models) {
+      const value = provider.id + '/' + model.id
+      const option = el('option',{value,text:(model.name || model.id) + '（' + value + '）'})
+      option.selected = value === selected; group.append(option)
+    }
+    fragment.append(group)
+  }
+  return fragment
+}
+function memberRow(chain,index) {
+  const member = chain.models[index]
+  const value = typeof member === 'string' ? member : member.provider + '/' + member.model
+  const row = el('div',{class:'member'})
+  row.append(el('span',{class:'idx',text:String(index+1)}))
+  const picker = el('select',{'aria-label':chain.name + ' 成员 ' + (index+1) + ' 模型'})
+  picker.append(options(value))
+  const input = el('input',{class:'free',type:'text',value,placeholder:'provider/model','aria-label':chain.name + ' 成员 ' + (index+1) + ' 手动输入'})
+  picker.addEventListener('change',() => { if (!picker.value) { input.focus(); return } chain.models[index] = picker.value; input.value = picker.value; dirty() })
+  input.addEventListener('input',() => { chain.models[index] = input.value; picker.value = input.value; dirty() })
+  row.append(picker,input)
+  for (const [delta,text] of [[-1,'上移'],[1,'下移']]) {
+    const button = el('button',{text,'aria-label':'成员 ' + (index+1) + ' ' + text,onclick:() => {
+      const target = index+delta
+      if (target < 0 || target >= chain.models.length) return
+      const [item] = chain.models.splice(index,1); chain.models.splice(target,0,item); dirty(); render()
+    }})
+    button.disabled = index+delta < 0 || index+delta >= chain.models.length; row.append(button)
+  }
+  row.append(el('button',{text:'删除',onclick:() => { chain.models.splice(index,1); dirty(); render() }}))
+  return row
+}
+function chainCard(chain,index) {
+  const card = el('section',{class:'chain'})
+  const head = el('div',{class:'chain-head'})
+  head.append(el('span',{text:'链 ' + (index+1)}))
+  head.append(el('input',{type:'text',value:chain.name || '',placeholder:'链名称','aria-label':'链 ' + (index+1) + ' 名称',oninput:(event) => { chain.name = event.target.value; dirty() }}))
+  head.append(el('input',{class:'id',type:'text',value:chain.id || '',placeholder:'链 id','aria-label':'链 ' + (index+1) + ' ID',oninput:(event) => { chain.id = event.target.value.trim(); dirty() }}))
+  const enable = el('input',{type:'checkbox'}); enable.checked = chain.enabled !== false
+  enable.addEventListener('change',() => { chain.enabled = enable.checked; dirty() })
+  head.append(el('label',{},[enable,el('span',{text:'启用'})]))
+  const strategy = el('select',{'aria-label':'链 ' + (index+1) + ' 策略',onchange:(event) => { chain.strategy = event.target.value; dirty() }},[
+    el('option',{value:'fallback',text:'顺序降级'}),el('option',{value:'round-robin',text:'轮转起点'})])
+  strategy.value = chain.strategy || 'fallback'; head.append(strategy)
+  head.append(el('span',{class:'spacer'}))
+  head.append(el('button',{text:'删除链',onclick:() => { if(confirm('删除链「' + chain.name + '」？')) { STATE.chains.splice(index,1); dirty(); render() } }}))
+  card.append(head)
+  for(let i=0;i<chain.models.length;i++) card.append(memberRow(chain,i))
+  card.append(el('button',{text:'＋ 添加成员',onclick:() => { chain.models.push(''); dirty(); render() }}))
+  return card
+}
+function render() {
+  $('#chains').replaceChildren(...STATE.chains.map(chainCard))
+  if (!STATE.chains.length) $('#chains').append(el('p',{text:'还没有配置链。新增链并添加至少一个成员后保存。'}))
+  const box = el('section',{class:'chain'}), row = el('div',{class:'coolrow'})
+  box.append(el('h2',{text:'失败成员冷却'}))
+  const cooldown = STATE.policy.cooldown
+  const enable = el('input',{type:'checkbox'}); enable.checked = cooldown.enabled !== false
+  enable.addEventListener('change',() => { cooldown.enabled = enable.checked; dirty() })
+  row.append(el('label',{},[enable,el('span',{text:'启用冷却'})]))
+  const minutes = el('input',{class:'small-number',type:'number',min:'0.01',step:'any',value:String((cooldown.ms || 300000)/60000),'aria-label':'冷却分钟'})
+  minutes.addEventListener('input',() => { cooldown.ms = Number(minutes.value)*60000; dirty() })
+  row.append(minutes,el('span',{text:'分钟'})); box.append(row)
+  box.append(el('p',{class:'hint',text:'仅对配置的确定性错误冷却；全员冷却时仍尝试全部成员。降级码表和轮转次数可直接编辑配置文件。'}))
+  $('#policy').replaceChildren(box)
+}
+async function save() {
+  if (!STATE || BUSY) return
+  $('#error').textContent = ''
+  if (STATE.chains.some(chain => !chain.id || !chain.models.length || chain.models.some(member => typeof member === 'string' && (!member.trim() || member.indexOf('/') <= 0 || member.endsWith('/'))))) {
+    $('#error').textContent = '每条链需要非空 ID 和至少一个有效的 provider/model 成员。'; return
+  }
+  const ms = STATE.policy.cooldown.ms
+  if (!Number.isFinite(ms) || ms <= 0) { $('#error').textContent = '冷却时长必须大于零。'; return }
+  const revision = EDIT_REVISION
+  BUSY = true; controls()
+  try {
+    const result = await request('api/chains',{method:'PUT',headers:{'content-type':'application/json','if-match':STATE.revision},body:JSON.stringify({
+      ...(STATE.$schema ? {$schema:STATE.$schema} : {}),version:STATE.version || 1,policy:STATE.policy,chains:STATE.chains,
+    })})
+    STATE.revision = result.revision
+    if (EDIT_REVISION === revision) { DIRTY = false; $('#save').textContent = '保存配置'; $('#message').textContent = '已保存，配置已加载。' }
+    else $('#message').textContent = '已保存提交时的配置；保存期间的新改动仍待保存。'
+  } catch(error) { $('#error').textContent = '保存失败：' + error.message }
+  finally { BUSY = false; controls() }
+}
+function routeLabel(event) {
+  if(!event) return '暂无记录'
+  const kind = {attempt:'正在尝试',degrade:'发生降级',committed:'已开始作答',stopped:'停止尝试'}[event.kind] || event.kind
+  return kind + ' · ' + (event.provider || '') + '/' + (event.model || '') + (event.code ? ' · ' + event.code : '')
+}
+function timeLabel(event) { return event ? new Date(event.time).toLocaleString('zh-CN',{hour12:false}) : '' }
+async function refreshStatus() {
+  $('#refresh-status').disabled = true
+  try {
+    const data = await request('api/status')
+    const table = el('table',{},[el('thead',{},[el('tr',{},['链','最近动作','最近降级','最近作答','冷却成员'].map(text=>el('th',{text,scope:'col'})))])])
+    const body = el('tbody')
+    for(const chain of data.chains) {
+      const cells = [chain.name + (chain.enabled === false ? '（停用）' : ''),routeLabel(chain.latest),
+        routeLabel(chain.lastDegrade) + ' ' + timeLabel(chain.lastDegrade),routeLabel(chain.lastServed) + ' ' + timeLabel(chain.lastServed),
+        chain.members.filter(member=>member.cooldownUntil).map(member=>member.provider+'/'+member.model+' 至 '+new Date(member.cooldownUntil).toLocaleTimeString('zh-CN',{hour12:false})).join('；') || '无']
+      body.append(el('tr',{},cells.map(text=>el('td',{text}))))
+    }
+    table.append(body); $('#status-list').replaceChildren(table)
+    $('#status-hint').textContent = '更新于 ' + new Date(data.generatedAt).toLocaleTimeString('zh-CN',{hour12:false}) + ' · 仅保留最近 ' + data.retention + ' 条路由动作，重启清空。'
+  } catch(error) { $('#status-hint').textContent = '状态加载失败：' + error.message + '。请确认宿主已加载新版插件。' }
+  finally { $('#refresh-status').disabled = false }
+}
+$('#save').addEventListener('click',save)
+$('#reload').addEventListener('click',() => { if(!DIRTY || confirm('重新加载将丢弃未保存改动，继续？')) load() })
+$('#addChain').addEventListener('click',() => {
+  const ids = new Set(STATE.chains.map(chain=>chain.id)); let n = STATE.chains.length+1
+  while(ids.has('chain'+n)) n++
+  STATE.chains.push({id:'chain'+n,name:'新链 '+n,strategy:'fallback',enabled:true,models:[]}); dirty(); render()
+})
+$('#refresh-status').addEventListener('click',refreshStatus)
+$('#runtime').addEventListener('toggle',() => { if($('#runtime').open) refreshStatus() })
+window.addEventListener('beforeunload',(event) => { if(DIRTY) { event.preventDefault(); event.returnValue = '' } })
+load()
+</script></body></html>

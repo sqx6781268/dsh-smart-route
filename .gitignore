@@ -1,0 +1,22 @@
+node_modules/
+*.tgz
+release/
+coverage/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+.DS_Store
+# 本机参考副本与会话交接不进入公开版本控制。
+reference-smart-route/
+docs/交接给下一会话.md
+docs/会话徽标问题交接.md
+docs/决策记录.md
+docs/待办开发验收记录.md
+docs/开源发布前检查报告.md
+docs/发布修复进度.md
+待办事项.md
+智能体指南.md
+用户指南.md
+需求-多链路由插件.md
