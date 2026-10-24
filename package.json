@@ -1,6 +1,6 @@
 {
   "name": "dsh-multi-chain",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "repository": { "type": "git", "url": "git+https://github.com/sqx6781268/dsh-smart-route.git" },
   "homepage": "https://github.com/sqx6781268/dsh-smart-route#readme",
