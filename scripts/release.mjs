@@ -16,7 +16,7 @@ const source=join(output,'source');mkdirSync(source)
 const files=['package.json','cordis.patch.yml','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','.gitignore','.github','src','lib','locale','test','scripts','examples']
 for(const path of files)cpSync(join(root,path),join(source,path),{recursive:true})
 mkdirSync(join(source,'docs'))
-for(const doc of ['配置说明.md','发布验收说明.md'])cpSync(join(root,'docs',doc),join(source,'docs',doc))
+for(const doc of ['配置说明.md','发布验收说明.md','图片路由契约冻结.md','图片路由实现说明.md'])cpSync(join(root,'docs',doc),join(source,'docs',doc))
 run(process.execPath,['scripts/check.mjs'],source)
 run(process.execPath,['scripts/test.mjs'],source)
 const npmCLI=process.env.npm_execpath

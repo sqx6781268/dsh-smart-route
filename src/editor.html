@@ -176,7 +176,9 @@ async function save() {
 }
 function routeLabel(event) {
   if(!event) return '暂无记录'
-  const kind = {attempt:'正在尝试',degrade:'发生降级',committed:'已开始作答',stopped:'停止尝试'}[event.kind] || event.kind
+  // skip 是图片请求的成员筛选记录（适配器只记成员与固定码，不记图片/提示词）。
+  // 这里只补一个动作名，能力展示（窗口/输出/模态）不变。
+  const kind = {attempt:'正在尝试',degrade:'发生降级',committed:'已开始作答',stopped:'停止尝试',skip:'跳过成员'}[event.kind] || event.kind
   return kind + ' · ' + (event.provider || '') + '/' + (event.model || '') + (event.code ? ' · ' + event.code : '')
 }
 function timeLabel(event) { return event ? new Date(event.time).toLocaleString('zh-CN',{hour12:false}) : '' }
@@ -184,11 +186,12 @@ async function refreshStatus() {
   $('#refresh-status').disabled = true
   try {
     const data = await request('api/status')
-    const table = el('table',{},[el('thead',{},[el('tr',{},['链','最近动作','最近降级','最近作答','冷却成员'].map(text=>el('th',{text,scope:'col'})))])])
+    const table = el('table',{},[el('thead',{},[el('tr',{},['链','最近动作','最近降级','最近作答','图片筛选','冷却成员'].map(text=>el('th',{text,scope:'col'})))])])
     const body = el('tbody')
     for(const chain of data.chains) {
       const cells = [chain.name + (chain.enabled === false ? '（停用）' : ''),routeLabel(chain.latest),
         routeLabel(chain.lastDegrade) + ' ' + timeLabel(chain.lastDegrade),routeLabel(chain.lastServed) + ' ' + timeLabel(chain.lastServed),
+        routeLabel(chain.lastVisionSkip) + ' ' + timeLabel(chain.lastVisionSkip),
         chain.members.filter(member=>member.cooldownUntil).map(member=>member.provider+'/'+member.model+' 至 '+new Date(member.cooldownUntil).toLocaleTimeString('zh-CN',{hour12:false})).join('；') || '无']
       body.append(el('tr',{},cells.map(text=>el('td',{text}))))
     }

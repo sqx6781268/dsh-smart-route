@@ -230,9 +230,13 @@ export function apply(ctx, config) {
     return { generatedAt: now, retention: 100, chains: state.configuredChains.map((chain) => {
       const events = routeEvents.filter((event) => event.chain === chain.id)
       return { id: chain.id, name: chain.name, enabled: chain.enabled,
+        // latest 沿用基线语义（最后一条记录）。图片请求被筛掉/拒绝时，那条
+        // skip 记录就是最后一条，用户能在"最近动作"里直接看到原因码。
         latest: events.at(-1) ?? null,
         lastDegrade: events.findLast((event) => event.kind === 'degrade') ?? null,
         lastServed: events.findLast((event) => event.kind === 'committed') ?? null,
+        // 图片请求的成员筛选记录（只含成员与固定码，不含图片/提示词/凭据）。
+        lastVisionSkip: events.findLast((event) => event.kind === 'skip') ?? null,
         members: chain.models.map((member) => ({ ...member,
           cooldownUntil: state.policy.cooldown.enabled !== false && (cooldownUntilOf(member) ?? 0) > now ? cooldownUntilOf(member) : null })) }
     }), events: routeEvents.slice().reverse() }

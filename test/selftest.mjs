@@ -385,7 +385,14 @@ async function testCapabilityIntersection() {
     const resolved = await llm.registeredAdapter.resolveModel('MultiChain', 'c1')
     check('窗口取最小值', resolved.context?.contextWindow === 128_000, String(resolved.context?.contextWindow))
     check('输出上限取最小值', resolved.defaultMaxTokens === 8_192, String(resolved.defaultMaxTokens))
-    check('模态取交集（丢掉了 image）', JSON.stringify(resolved.inputModalities) === '["text"]', JSON.stringify(resolved.inputModalities))
+    // 契约 v2（R2/B2）：视觉成员（同时含 text+image）把 image 走"额外宣称"通道，
+    // 所以混合链必须宣称 ['text','image'] —— 否则宿主会把历史图投影成占位文本，
+    // 链里的视觉成员永远收不到图。窗口/输出仍是"取最小"，不是并集。
+    check(
+      '模态：混合链额外宣称 image（不是取交集丢掉 image）',
+      JSON.stringify(resolved.inputModalities) === '["text","image"]',
+      JSON.stringify(resolved.inputModalities),
+    )
     check('provider/id 与请求一致（宿主会校验）', resolved.provider === 'MultiChain' && resolved.id === 'c1')
   })
 }
